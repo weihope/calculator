@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
+import 'gold_calculator.dart';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 
@@ -8,6 +11,45 @@ class TradeRecordDb {
 
   static const String _tableName = 'trade_records';
   static Database? _database;
+  final ValueNotifier<int> changes = ValueNotifier(0);
+
+  static Future<void> createSchema(DatabaseExecutor db) => db.execute('''
+    CREATE TABLE trade_records (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      balance REAL, investment REAL, leverage REAL,
+      entry_price REAL NOT NULL, target_price REAL, stop_loss REAL,
+      is_long INTEGER NOT NULL DEFAULT 1, remark TEXT, created_at TEXT NOT NULL,
+      record_type TEXT NOT NULL DEFAULT 'legacy', payload_json TEXT
+    )
+  ''');
+
+  /// Called within sqflite's onUpgrade transaction; any failure rolls back.
+  static Future<void> migrateToV5(DatabaseExecutor db) async {
+    await db.execute('ALTER TABLE trade_records RENAME TO trade_records_v4');
+    await createSchema(db);
+    await db.execute(
+      '''INSERT INTO trade_records
+      (id, balance, investment, leverage, entry_price, target_price, stop_loss, is_long, remark, created_at)
+      SELECT id, balance, investment, leverage, entry_price, target_price, stop_loss, is_long, remark, created_at FROM trade_records_v4''',
+    );
+    await db.execute('DROP TABLE trade_records_v4');
+  }
+
+  Future<int> insertGoldRecord(GoldResult result) async {
+    final db = await _readyDatabase();
+    final id = await db.insert(_tableName, {
+      'record_type': 'xauusd',
+      'payload_json': jsonEncode(result.payload),
+      'entry_price': double.parse(
+        (result.payload['inputs'] as Map)['Entry price'] as String,
+      ),
+      'is_long': result.payload['isLong'] == true ? 1 : 0,
+      'remark': result.payload['remark'],
+      'created_at': DateTime.now().toIso8601String(),
+    });
+    changes.value++;
+    return id;
+  }
 
   Future<Database> get database async {
     if (_database != null) {
@@ -30,28 +72,16 @@ class TradeRecordDb {
 
     return openDatabase(
       path,
-      version: 4,
+      version: 5,
       onCreate: (db, version) async {
-        await db.execute('''
-          CREATE TABLE $_tableName (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            balance REAL NOT NULL,
-            investment REAL NOT NULL,
-            leverage REAL NOT NULL,
-            entry_price REAL NOT NULL,
-            target_price REAL,
-            stop_loss REAL NOT NULL,
-            is_long INTEGER NOT NULL DEFAULT 1,
-            remark TEXT,
-            created_at TEXT NOT NULL
-          )
-        ''');
+        await createSchema(db);
       },
       onOpen: (db) async {
         await _ensureColumns(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         await _ensureColumns(db);
+        if (oldVersion < 5) await migrateToV5(db);
       },
     );
   }
@@ -71,9 +101,7 @@ class TradeRecordDb {
     }
 
     if (!hasTargetPriceColumn) {
-      await db.execute(
-        'ALTER TABLE $_tableName ADD COLUMN target_price REAL',
-      );
+      await db.execute('ALTER TABLE $_tableName ADD COLUMN target_price REAL');
     }
 
     if (!hasRemarkColumn) {
@@ -92,7 +120,7 @@ class TradeRecordDb {
     String? remark,
   }) async {
     final db = await _readyDatabase();
-    return db.insert(_tableName, {
+    final id = await db.insert(_tableName, {
       'balance': balance,
       'investment': investment,
       'leverage': leverage,
@@ -103,6 +131,8 @@ class TradeRecordDb {
       'remark': remark,
       'created_at': DateTime.now().toIso8601String(),
     });
+    changes.value++;
+    return id;
   }
 
   Future<List<Map<String, dynamic>>> getTradeRecords() async {

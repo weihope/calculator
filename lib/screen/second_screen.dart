@@ -3,7 +3,8 @@ import 'dart:io';
 import 'package:calculator/screen/third_screen.dart';
 import 'package:calculator/utlis/cal_function.dart';
 import 'package:calculator/utlis/trade_record_db.dart';
-import 'package:cross_file/cross_file.dart';
+import 'package:calculator/utlis/gold_calculator.dart';
+import 'package:calculator/screen/gold_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:path_provider/path_provider.dart';
@@ -47,6 +48,45 @@ class _SecondScreenState extends State<SecondScreen> {
   void initState() {
     super.initState();
     _recordsFuture = TradeRecordDb.instance.getTradeRecords();
+    TradeRecordDb.instance.changes.addListener(_reloadRecords);
+  }
+
+  @override
+  void dispose() {
+    TradeRecordDb.instance.changes.removeListener(_reloadRecords);
+    super.dispose();
+  }
+
+  Widget _goldRecord(Map<String, dynamic> record) {
+    final id = (record['id'] as num).toInt();
+    Widget content;
+    try {
+      content = GoldResultCard(
+        result: GoldResult.decode(record['payload_json'] as String),
+      );
+    } catch (_) {
+      content = const Text('XAUUSD record cannot be read.');
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Checkbox(
+              value: _selectedRecordIds.contains(id),
+              onChanged: (v) => _toggleRecordSelection(id, v ?? false),
+            ),
+            Expanded(child: Text(_formatCreatedAt(record['created_at']))),
+            TextButton.icon(
+              onPressed: () => _openSharePreview(record),
+              icon: const Icon(Icons.share),
+              label: const Text('Share'),
+            ),
+          ],
+        ),
+        content,
+      ],
+    );
   }
 
   void _reloadRecords() {
@@ -592,6 +632,27 @@ class _SecondScreenState extends State<SecondScreen> {
   }
 
   Widget _buildShareCard(Map<String, dynamic> record) {
+    if (record['record_type'] == 'xauusd') {
+      try {
+        return SizedBox(
+          width: 420,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              GoldResultCard(
+                result: GoldResult.decode(record['payload_json'] as String),
+              ),
+              Text('Created ${_formatCreatedAt(record['created_at'])}'),
+            ],
+          ),
+        );
+      } catch (_) {
+        return const SizedBox(
+          width: 420,
+          child: Text('XAUUSD record cannot be read.'),
+        );
+      }
+    }
     final double balance = (record['balance'] as num).toDouble();
     final double investment = (record['investment'] as num).toDouble();
     final double leverage = (record['leverage'] as num).toDouble();
@@ -769,6 +830,7 @@ class _SecondScreenState extends State<SecondScreen> {
       final bool isLong = ((record['is_long'] ?? 1) as num) == 1;
       await precacheImage(AssetImage(_shareImageAssetPath(isLong)), context);
       final directory = await getTemporaryDirectory();
+      if (!mounted) return;
       final bytes = await _screenshotController.captureFromWidget(
         InheritedTheme.captureAll(
           context,
@@ -790,8 +852,9 @@ class _SecondScreenState extends State<SecondScreen> {
 
       await SharePlus.instance.share(
         ShareParams(
-          text:
-              'Trade setup ${((record['is_long'] ?? 1) as num) == 1 ? 'LONG' : 'SHORT'}\nEntry: ${formatNum(record['entry_price'], 4)}\nLeverage: ${formatNum(record['leverage'], 2)}x',
+          text: record['record_type'] == 'xauusd'
+              ? GoldResult.decode(record['payload_json'] as String).shareText
+              : 'Trade setup ${((record['is_long'] ?? 1) as num) == 1 ? 'LONG' : 'SHORT'}\nEntry: ${formatNum(record['entry_price'], 4)}\nLeverage: ${formatNum(record['leverage'], 2)}x',
           files: [XFile(file.path)],
         ),
       );
@@ -1028,6 +1091,8 @@ class _SecondScreenState extends State<SecondScreen> {
                 ),
                 itemBuilder: (context, index) {
                   final record = records[index];
+                  if (record['record_type'] == 'xauusd')
+                    return _goldRecord(record);
                   final double balance = (record['balance'] as num).toDouble();
                   final double investment = (record['investment'] as num)
                       .toDouble();

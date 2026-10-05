@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:calculator/screen/first_screen.dart';
 import 'package:calculator/screen/second_screen.dart';
+import 'package:calculator/screen/gold_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
@@ -118,7 +119,11 @@ class _MainAppState extends State<MainApp> {
     );
   }
 
-  final List<Widget> _pages = const [FirstScreen(), SecondScreen()];
+  final List<Widget> _pages = const [
+    FirstScreen(),
+    SecondScreen(),
+    GoldScreen(),
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -126,7 +131,9 @@ class _MainAppState extends State<MainApp> {
       navigatorKey: _navigatorKey,
       scaffoldMessengerKey: _scaffoldMessengerKey,
       home: Scaffold(
-        body: SafeArea(child: _pages[_index]),
+        body: SafeArea(
+          child: IndexedStack(index: _index, children: _pages),
+        ),
         bottomNavigationBar: BottomNavigationBar(
           currentIndex: _index,
           onTap: (i) {
@@ -139,6 +146,10 @@ class _MainAppState extends State<MainApp> {
             BottomNavigationBarItem(
               icon: Icon(Icons.receipt),
               label: 'Records',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.calculate_outlined),
+              label: 'XAUUSD',
             ),
           ],
         ),
