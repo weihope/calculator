@@ -1,0 +1,47 @@
+name: calculator
+description: "A new Flutter project."
+publish_to: 'none'
+version: 0.1.5+8
+
+environment:
+  sdk: ^3.8.1
+
+dependencies:
+  flutter:
+    sdk: flutter
+  shared_preferences: ^2.5.3
+  sqflite: ^2.4.2
+  path: ^1.9.1
+  share_plus: ^12.0.1
+  screenshot: ^3.0.0
+  local_auth: ^2.3.0
+  flutter_secure_storage: ^9.2.4
+  http: ^1.5.0
+  package_info_plus: ^8.3.0
+  flutter_launcher_icons: ^0.14.3
+  flutter_native_splash: ^2.4.6
+
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/images/icon_1024.png"
+
+flutter_native_splash:
+  color: "#ffffff"
+  image: assets/images/icon_1024.png
+  android: true
+  ios: true
+
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
+    - assets/images/fear_greed/
+    - assets/images/fear_greed/
